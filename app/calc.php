@@ -1,57 +1,99 @@
 <?php
+// KONTROLER strony kalkulatora
 require_once dirname(__FILE__).'/../config.php';
+//załaduj Smarty
+require_once _ROOT_PATH.'/lib/smarty/Smarty.class.php';
 
-include _ROOT_PATH.'/app/security/check.php';
-
-//Pobranie parametrów
-function getParams(&$amount, &$years, &$percent){
-    $amount = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : null;
-    $years = isset($_REQUEST['years']) ? $_REQUEST['years'] : null;
-    $percent = isset($_REQUEST['percent']) ? $_REQUEST['percent'] : null;
+//pobranie parametrów
+function getParams(&$form){
+	$form['x'] = isset($_REQUEST['x']) ? $_REQUEST['x'] : null;
+	$form['y'] = isset($_REQUEST['y']) ? $_REQUEST['y'] : null;
+	$form['op'] = isset($_REQUEST['op']) ? $_REQUEST['op'] : null;	
 }
 
-function validate(&$amount, &$years, &$percent, &$messages){
-    if(!(isset($amount) && isset($years) && isset($messages))){
-        return false;
-    }
+//walidacja parametrów z przygotowaniem zmiennych dla widoku
+function validate(&$form,&$infos,&$msgs,&$hide_intro){
 
-    if ($amount == "") $messages[] = "Kwota kredytu nie zostala podana";
-    if ($years == "") $messages[] = "Liczba rat nie zostala podana";
-    if ($percent == "") $messages[] = "Oprocentowanie nie zostalo podane";
- 
-    if (count ( $messages ) != 0) return false;
+	//sprawdzenie, czy parametry zostały przekazane - jeśli nie to zakończ walidację
+	if ( ! (isset($form['x']) && isset($form['y']) && isset($form['op']) ))	return false;	
+	
+	//parametry przekazane zatem
+	//nie pokazuj wstępu strony gdy tryb obliczeń (aby nie trzeba było przesuwać)
+	// - ta zmienna zostanie użyta w widoku aby nie wyświetlać całego bloku itro z tłem 
+	$hide_intro = true;
 
-    if (! is_numeric( $amount )) {
-        $messages [] = 'Kwota nie jest liczba calkowita.';
-    }
-    if (! is_numeric( $years )) {
-        $messages [] = 'Liczba lat nie jest liczba calkowita.';
-    }
-    if (! (is_double( $percent ) | is_numeric($percent))) {
-        $messages [] = 'Procent kredytu nie jest liczba calkowita';
-    }
-    if (count ( $messages ) != 0) return false;
-    else return true;
+	$infos [] = 'Przekazano parametry.';
+
+	// sprawdzenie, czy potrzebne wartości zostały przekazane
+	if ( $form['x'] == "") $msgs [] = 'Nie podano liczby 1';
+	if ( $form['y'] == "") $msgs [] = 'Nie podano liczby 2';
+	
+	//nie ma sensu walidować dalej gdy brak parametrów
+	if ( count($msgs)==0 ) {
+		// sprawdzenie, czy $x i $y są liczbami całkowitymi
+		if (! is_numeric( $form['x'] )) $msgs [] = 'Pierwsza wartość nie jest liczbą';
+		if (! is_numeric( $form['y'] )) $msgs [] = 'Druga wartość nie jest liczbą';
+	}
+	
+	if (count($msgs)>0) return false;
+	else return true;
+}
+	
+// wykonaj obliczenia
+function process(&$form,&$infos,&$msgs,&$result){
+	$infos [] = 'Parametry poprawne. Wykonuję obliczenia.';
+	
+	//konwersja parametrów na int
+	$form['x'] = floatval($form['x']);
+	$form['y'] = floatval($form['y']);
+	
+	//wykonanie operacji
+	switch ($form['op']) {
+	case 'minus' :
+		$result = $form['x'] - $form['y'];
+		$form['op_name'] = '-';
+		break;
+	case 'times' :
+		$result = $form['x'] * $form['y'];
+		$form['op_name'] = '*';
+		break;
+	case 'div' :
+		$result = $form['x'] / $form['y'];
+		$form['op_name'] = '/';
+		break;
+	default :
+		$result = $form['x'] + $form['y'];
+		$form['op_name'] = '+';
+		break;
+	}
 }
 
-function process(&$amount, &$years, &$percent, &$result){
-    $amount = intval($amount);
-    $years = intval($years);
-    $percent = floatval($percent);
-//obliczenia ->
-    $result = (($amount+($amount *($percent * 0.01))) / ($years * 12));
-    $result = round($result,2);
-}
-
-$amount = null;
-$years = null;
-$percent = null;
-$result = null;
+//inicjacja zmiennych
+$form = null;
+$infos = array();
 $messages = array();
-getParams($amount,$years,$percent);
-//gdy jest prawidlowo podane
-if ( validate($amount,$years, $percent,$messages) ) { //wykonaj obliczenia
-    process($amount, $years,$percent,$result);
+$result = null;
+	
+getParams($form);
+if ( validate($form,$infos,$messages,$hide_intro) ){
+	process($form,$infos,$messages,$result);
 }
 
-include 'calc_view.php';
+// 4. Przygotowanie danych dla szablonu
+
+$smarty = new Smarty();
+
+$smarty->assign('app_url',_APP_URL);
+$smarty->assign('root_path',_ROOT_PATH);
+$smarty->assign('page_title','Przykład 04');
+$smarty->assign('page_description','Profesjonalne szablonowanie oparte na bibliotece Smarty');
+$smarty->assign('page_header','Szablony Smarty');
+
+//pozostałe zmienne niekoniecznie muszą istnieć, dlatego sprawdzamy aby nie otrzymać ostrzeżenia
+$smarty->assign('form',$form);
+$smarty->assign('result',$result);
+$smarty->assign('messages',$messages);
+$smarty->assign('infos',$infos);
+
+// 5. Wywołanie szablonu
+$smarty->display(_ROOT_PATH.'/app/calc.html');
